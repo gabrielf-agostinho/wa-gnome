@@ -1,8 +1,10 @@
 import { BrowserWindow, shell, type Session } from 'electron'
 import { WHATSAPP_URL } from '../shared/constants'
 import { attachContextMenu } from './context-menu'
+import { isQuitting } from './lifecycle'
 import { createLogger } from './logger'
 import { isSafeExternalUrl, isWhatsAppUrl } from './policy'
+import { parseUnreadCount } from './unread'
 
 const log = createLogger('window')
 
@@ -12,6 +14,11 @@ const ERR_ABORTED = -3
 export interface WindowManagerOptions {
   session: Session
   preloadPath: string
+  iconPath: string
+  onVisibilityChanged?: (visible: boolean) => void
+  onUnreadChanged?: (count: number) => void
+  onHiddenByClose?: () => void
+  onQuitRequested?: () => void
 }
 
 export class WindowManager {
@@ -34,6 +41,7 @@ export class WindowManager {
       minWidth: 640,
       minHeight: 480,
       title: 'WhatsApp',
+      icon: this.options.iconPath,
       show: false,
       backgroundColor: '#111b21',
       autoHideMenuBar: true,
@@ -51,6 +59,15 @@ export class WindowManager {
     this.window = win
 
     win.once('ready-to-show', () => win.show())
+
+    win.on('close', (event) => {
+      if (isQuitting()) return
+      event.preventDefault()
+      win.hide()
+      this.options.onHiddenByClose?.()
+    })
+    win.on('show', () => this.notifyVisibility(true))
+    win.on('hide', () => this.notifyVisibility(false))
     win.on('closed', () => {
       this.clearRetry()
       this.window = null
@@ -58,6 +75,7 @@ export class WindowManager {
 
     this.installNavigationPolicy(win)
     this.installRecovery(win)
+    this.installPageObservers(win)
     attachContextMenu(win.webContents)
 
     void this.load()
@@ -77,6 +95,26 @@ export class WindowManager {
 
   isVisible(): boolean {
     return this.window?.isVisible() ?? false
+  }
+
+  private notifyVisibility(visible: boolean): void {
+    log.info(visible ? 'window shown' : 'window hidden')
+    this.options.onVisibilityChanged?.(visible)
+  }
+
+  private installPageObservers(win: BrowserWindow): void {
+    const wc = win.webContents
+
+    wc.on('page-title-updated', (_event, title) => {
+      this.options.onUnreadChanged?.(parseUnreadCount(title))
+    })
+
+    wc.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown' && input.control && !input.alt && !input.shift && input.key.toLowerCase() === 'q') {
+        event.preventDefault()
+        this.options.onQuitRequested?.()
+      }
+    })
   }
 
   private async load(): Promise<void> {

@@ -10,7 +10,7 @@ Stack: Electron 45 (Chromium 156, Node 24) · TypeScript 7 (strict) · electron-
 | Fase | Escopo | Estado |
 |------|--------|--------|
 | 1 | Estrutura, janela, sessão persistente | ✅ implementada |
-| 2 | Bandeja, fechar → ocultar, Sair | pendente |
+| 2 | Bandeja, fechar → ocultar, Sair | ✅ implementada |
 | 3 | Notificações com a janela oculta | pendente (investigação inicial abaixo) |
 | 4 | Autostart (`~/.config/autostart`) | pendente |
 | 5 | Logs em arquivo, AppImage/.deb | pendente |
@@ -41,10 +41,14 @@ npm run check      # typecheck + test + build
 src/
 ├── shared/constants.ts    URL, origem e partição de sessão
 ├── main/
-│   ├── index.ts           bootstrap: instância única, sessão, janela
+│   ├── index.ts           bootstrap: instância única, sessão, janela, bandeja
 │   ├── lifecycle.ts       instância única, flush da sessão no quit, flag "quitting"
 │   ├── session.ts         partição persist:whatsapp + política de permissões
-│   ├── window.ts          WindowManager: criar/mostrar/ocultar, navegação, recuperação
+│   ├── window.ts          WindowManager: criar/mostrar/ocultar, X → ocultar, navegação, recuperação
+│   ├── tray.ts            TrayManager: ícone, menu, contador de não lidas
+│   ├── tray-support.ts    detecta host StatusNotifierItem no D-Bus
+│   ├── unread.ts          contador de não lidas a partir do título "(N) WhatsApp"
+│   ├── user-agent.ts      remove o token "wa-gnome/x.y.z" do UA
 │   ├── context-menu.ts    menu de contexto de edição + corretor ortográfico
 │   ├── policy.ts          regras puras (URLs, permissões) — testadas
 │   └── logger.ts
@@ -53,6 +57,24 @@ src/
 
 Não há `src/renderer/`: a interface é o próprio `https://web.whatsapp.com/`.
 
+Ícones em `resources/icons/` são arte original (não o logo do WhatsApp),
+gerados por `python3 scripts/generate-icons.py` (requer Pillow).
+
+### Janela e bandeja
+- **X** oculta a janela; o processo, a conexão e as notificações continuam.
+- **Encerrar de verdade:** menu da bandeja → *Sair*, ou **Ctrl+Q** na janela.
+- **Clique no ícone** da bandeja: abre e foca a janela.
+- **Menu:** contador de conversas não lidas · Abrir WhatsApp · Ocultar janela ·
+  Iniciar com o sistema (desabilitado até a Fase 4) · Sair.
+- O ícone ganha um ponto vermelho quando há conversas não lidas. A contagem é
+  lida do título público da página (`(3) WhatsApp`), sem acessar nada interno
+  do WhatsApp.
+- **Abrir o app de novo** pelo menu de aplicativos ou pelo terminal também
+  restaura a janela (instância única).
+- **Sem bandeja**, ou seja, sem o host SNI (verificado no D-Bus): ao fechar
+  pela primeira vez, o app mostra uma notificação explicando que continua em
+  execução e como reabri-lo.
+
 ### Segurança
 - `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, `webSecurity: true`.
 - Só a origem `https://web.whatsapp.com` é carregada na janela. Links e
@@ -60,7 +82,11 @@ Não há `src/renderer/`: a interface é o próprio `https://web.whatsapp.com/`.
   Redirecionamentos para fora e `<webview>` são bloqueados.
 - Permissões são negadas por padrão. A origem do WhatsApp recebe só
   `notifications`, `media` (microfone/câmera), `clipboard-sanitized-write` e `fullscreen`.
-- User-Agent padrão do Electron. O WhatsApp Web aceita esse UA sem modificação (validado).
+- User-Agent: o do próprio Electron, sem fingir ser o Google Chrome. Única
+  alteração: removemos o token `wa-gnome/<versão>`, que o Electron insere
+  quando o app tem nome próprio. Com esse token, o WhatsApp mostra "O WhatsApp
+  funciona no Google Chrome 100 ou posterior" em vez do QR Code (reproduzido
+  com o Electron 45.3.3). Veja `src/main/user-agent.ts`.
 
 ### Sessão
 Partição `persist:whatsapp` em `~/.config/wa-gnome/Partitions/whatsapp`
@@ -86,4 +112,11 @@ instância é permitida: dois processos no mesmo perfil podem corromper o LevelD
   Electron usa StatusNotifierItem/AppIndicator, e o ícone só aparece com a
   extensão *Ubuntu AppIndicators* (`ubuntu-appindicators@ubuntu.com`, ativa por
   padrão no Ubuntu) ou com *AppIndicator and KStatusNotifierItem Support* em
-  outras distribuições.
+  outras distribuições. O item publicado pelo Electron 45 tem `ItemIsMenu=false`
+  (o clique esquerdo dispara `Activate`, que abre a janela) e o menu é exportado
+  via `com.canonical.dbusmenu`. Os dois comportamentos foram validados chamando
+  o D-Bus diretamente.
+- **Wayland e foco**: o GNOME pode recusar dar foco a uma janela restaurada
+  (prevenção de roubo de foco) e mostrar "WhatsApp está pronto" em vez de
+  trazê-la para frente. Se isso acontecer ao clicar no ícone da bandeja, é essa
+  política do compositor.
