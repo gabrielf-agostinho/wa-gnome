@@ -53,7 +53,7 @@ export class WindowManager {
         nodeIntegration: false,
         webSecurity: true,
         spellcheck: true,
-        backgroundThrottling: false
+        backgroundThrottling: true
       }
     })
     this.window = win

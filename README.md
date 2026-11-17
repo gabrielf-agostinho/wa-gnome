@@ -11,7 +11,7 @@ Stack: Electron 45 (Chromium 156, Node 24) · TypeScript 7 (strict) · electron-
 |------|--------|--------|
 | 1 | Estrutura, janela, sessão persistente | ✅ implementada |
 | 2 | Bandeja, fechar → ocultar, Sair | ✅ implementada |
-| 3 | Notificações com a janela oculta | pendente (investigação inicial abaixo) |
+| 3 | Notificações com a janela oculta | ✅ implementada (falta validar com mensagem real) |
 | 4 | Autostart (`~/.config/autostart`) | pendente |
 | 5 | Logs em arquivo, AppImage/.deb | pendente |
 
@@ -39,9 +39,13 @@ npm run check      # typecheck + test + build
 
 ```text
 src/
-├── shared/constants.ts    URL, origem e partição de sessão
+├── shared/
+│   ├── constants.ts       URL, origem, partição de sessão, desktop ID
+│   └── ipc.ts             canais IPC preload → main
 ├── main/
 │   ├── index.ts           bootstrap: instância única, sessão, janela, bandeja
+│   ├── background.ts      switches do Chromium p/ execução em 2º plano, desktop ID
+│   ├── notifications.ts   NotificationManager: clique → restaurar janela, contagem
 │   ├── lifecycle.ts       instância única, flush da sessão no quit, flag "quitting"
 │   ├── session.ts         partição persist:whatsapp + política de permissões
 │   ├── window.ts          WindowManager: criar/mostrar/ocultar, X → ocultar, navegação, recuperação
@@ -52,7 +56,9 @@ src/
 │   ├── context-menu.ts    menu de contexto de edição + corretor ortográfico
 │   ├── policy.ts          regras puras (URLs, permissões) — testadas
 │   └── logger.ts
-└── preload/index.ts       sandbox + contextIsolation; não expõe nada ainda
+└── preload/
+    ├── index.ts               sandbox + contextIsolation; instala o observador
+    └── notification-observer.ts  observa show/click da Notification padrão
 ```
 
 Não há `src/renderer/`: a interface é o próprio `https://web.whatsapp.com/`.
@@ -94,15 +100,60 @@ Partição `persist:whatsapp` em `~/.config/wa-gnome/Partitions/whatsapp`
 são gravados no disco com `flushStorageData()` antes de sair. Uma única
 instância é permitida: dois processos no mesmo perfil podem corromper o LevelDB.
 
-## Notas técnicas (investigação)
+## Notificações
 
-- **Push API não funciona no Electron**: `pushManager.subscribe()` retorna
-  `AbortError: Registration failed - push service not available`. O Electron
-  não traz o serviço de push (FCM) do Chrome. Por isso, a estratégia para
-  notificações em segundo plano é manter o renderer vivo com
-  `backgroundThrottling: false`: o WebSocket do WhatsApp continua conectado e
-  a página continua chamando `new Notification()`. A Fase 3 valida isso com
-  mensagens reais.
+### Como funciona
+1. O WhatsApp Web chama `new Notification()` na própria página.
+2. O Chromium exibe a notificação via libnotify, no serviço
+   `org.freedesktop.Notifications` do GNOME Shell, com
+   `desktop-entry: io.github.wagnome.WaGnome`.
+3. A página continua viva com a janela oculta, porque o X oculta em vez de
+   fechar. Ela também continua com timers em velocidade normal, graças às
+   flags do Chromium em `src/main/background.ts`.
+4. Ao clicar na notificação, o observador instalado pelo preload avisa o
+   processo principal, que restaura a janela. O handler do próprio WhatsApp
+   roda normalmente e abre a conversa.
+
+### O que foi verificado (Electron 45.3.3, GNOME 50, Wayland)
+
+| Item | Resultado |
+|------|-----------|
+| Push API (`pushManager.subscribe`) | ❌ `AbortError: push service not available`, porque o Electron não traz o FCM do Chrome |
+| `ServiceWorkerRegistration.showNotification` | ❌ nenhuma chamada `Notify` no D-Bus e a promise nunca resolve, porque o Electron não implementa notificações persistentes |
+| `new Notification()` com a janela oculta | ✅ chega no D-Bus (`Notify`) e o evento `show` dispara |
+| Mesma `tag` | ✅ substitui a anterior (mesmo `replaces_id`), sem duplicata |
+| Página oculta por 6,5 min | ✅ `visibilityState: hidden`, timers de 1 s com intervalo máximo de 1005 ms, notificação entregue |
+| Clique → janela | ✅ restaura a janela, e o `onclick` da página continua rodando |
+| `window.focus()` da página | ❌ não mostra a janela oculta, por isso existe o observador |
+
+**Escolha do modo de segundo plano** (medido com a janela oculta por 6,5 min):
+
+| Configuração | Visibilidade | Intervalo máx. entre timers de 1 s |
+|---|---|---|
+| `backgroundThrottling: false` | `visible` | 1004 ms |
+| `backgroundThrottling: true` | `hidden` | **59 s** (*intensive wake-up throttling*) |
+| `true` + `--disable-background-timer-throttling` + `--disable-features=IntensiveWakeUpThrottling` | `hidden` | 1005 ms |
+
+`visible` com a janela oculta é ruim: o WhatsApp pode tratar a conversa aberta
+como lida, enviando confirmação de leitura indevida. A terceira linha dá o mesmo
+estado de uma aba do Chrome em segundo plano, mas sem limitar os timers.
+
+### Limitações
+- **O processo precisa estar rodando.** Sem Web Push no Electron, não há
+  notificação depois de *Sair*, antes do login no sistema (a Fase 4 resolve com
+  autostart) ou durante a suspensão. Ao acordar, o WhatsApp reconecta e entrega
+  as pendentes.
+- **Sem Push, não há alternativa oficial** para receber notificações com o
+  processo encerrado: o WhatsApp não oferece uma API pública para isso.
+  Alternativas viáveis: manter o app em execução (escolhida) ou usar o app
+  oficial do WhatsApp para Linux, se um dia existir.
+- **Foco no Wayland:** depois do clique na notificação, o GNOME pode mostrar
+  "está pronto" em vez de trazer a janela para frente.
+- O texto das mensagens nunca passa pelo processo principal nem pelos logs.
+  Só é registrado "notification delivered (#n)".
+
+## Notas técnicas
+
 - **Wayland**: o Electron 45 usa Wayland nativo por padrão (`ozone wayland`).
   Os avisos de `vaInitialize`/Vulkan no terminal são ruído do Chromium e não
   afetam o app. Se aparecer algum problema gráfico, use

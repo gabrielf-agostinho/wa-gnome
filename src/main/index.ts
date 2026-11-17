@@ -1,7 +1,9 @@
 import { join } from 'node:path'
 import { app, Menu, Notification, type Session } from 'electron'
+import { configureBackgroundExecution, configureDesktopIdentity } from './background'
 import { acquireSingleInstance, installCrashLogging, installShutdownHooks, quit } from './lifecycle'
 import { createLogger } from './logger'
+import { NotificationManager } from './notifications'
 import { createWhatsAppSession } from './session'
 import { TrayManager } from './tray'
 import { detectTrayHost, type TrayHostStatus } from './tray-support'
@@ -12,11 +14,14 @@ const log = createLogger('main')
 
 let windows: WindowManager | null = null
 let tray: TrayManager | null = null
+let notifications: NotificationManager | null = null
 let whatsappSession: Session | null = null
 let trayHost: TrayHostStatus = 'unknown'
 let hiddenHintShown = false
 
 installCrashLogging()
+configureDesktopIdentity()
+configureBackgroundExecution()
 
 function resource(...parts: string[]): string {
   return join(__dirname, '..', '..', 'resources', ...parts)
@@ -57,6 +62,11 @@ async function start(): Promise<void> {
     onHiddenByClose,
     onQuitRequested: quit
   })
+  notifications = new NotificationManager({
+    getWebContents: () => windows?.browserWindow?.webContents ?? null,
+    activate: () => windows?.show()
+  })
+  notifications.start()
   windows.create()
 
   trayHost = await detectTrayHost()
@@ -85,7 +95,10 @@ if (!acquireSingleInstance(() => windows?.show())) {
   installShutdownHooks(() => whatsappSession)
 
   app.on('window-all-closed', () => app.quit())
-  app.on('will-quit', () => tray?.destroy())
+  app.on('will-quit', () => {
+    notifications?.stop()
+    tray?.destroy()
+  })
 
   app
     .whenReady()

@@ -6,7 +6,7 @@
   "author": "Gabriel Agostinho",
   "license": "MIT",
   "private": true,
-  "desktopName": "wa-gnome.desktop",
+  "desktopName": "io.github.wagnome.WaGnome.desktop",
   "scripts": {
     "dev": "env -u ELECTRON_RUN_AS_NODE electron-vite dev",
     "build": "electron-vite build",
