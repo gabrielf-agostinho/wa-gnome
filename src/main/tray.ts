@@ -9,6 +9,8 @@ export interface TrayActions {
   hide(): void
   quit(): void
   isWindowVisible(): boolean
+  isAutostartEnabled(): boolean
+  setAutostartEnabled(enabled: boolean): void
 }
 
 export interface TrayIcons {
@@ -61,7 +63,15 @@ export class TrayManager {
         { label: 'Abrir WhatsApp', click: () => this.actions.show() },
         { label: 'Ocultar janela', enabled: visible, click: () => this.actions.hide() },
         { type: 'separator' },
-        { label: 'Iniciar com o sistema', type: 'checkbox', checked: false, enabled: false },
+        {
+          label: 'Iniciar com o sistema',
+          type: 'checkbox',
+          checked: this.actions.isAutostartEnabled(),
+          click: (item) => {
+            this.actions.setAutostartEnabled(item.checked)
+            this.refresh()
+          }
+        },
         { type: 'separator' },
         { label: 'Sair', click: () => this.actions.quit() }
       ])

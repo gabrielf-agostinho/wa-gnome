@@ -12,7 +12,7 @@ Stack: Electron 45 (Chromium 156, Node 24) · TypeScript 7 (strict) · electron-
 | 1 | Estrutura, janela, sessão persistente | ✅ implementada |
 | 2 | Bandeja, fechar → ocultar, Sair | ✅ implementada |
 | 3 | Notificações com a janela oculta | ✅ implementada (falta validar com mensagem real) |
-| 4 | Autostart (`~/.config/autostart`) | pendente |
+| 4 | Autostart (`~/.config/autostart`), configurações, lançador | ✅ implementada |
 | 5 | Logs em arquivo, AppImage/.deb | pendente |
 
 ## Desenvolvimento
@@ -25,7 +25,12 @@ npm start          # roda o build atual
 npm run typecheck  # tsc -b (strict)
 npm test           # vitest
 npm run check      # typecheck + test + build
+npm run desktop:install    # instala o lançador + ícones em ~/.local/
+npm run desktop:uninstall  # remove
 ```
+
+Flags de linha de comando: `--hidden` inicia só na bandeja (usado pelo
+autostart), `--install-desktop-entry` e `--uninstall-desktop-entry`.
 
 `WA_GNOME_DEBUG=1 npm start` ativa logs de debug e o menu padrão do Electron
 (Ctrl+Shift+I abre o DevTools).
@@ -46,6 +51,12 @@ src/
 │   ├── index.ts           bootstrap: instância única, sessão, janela, bandeja
 │   ├── background.ts      switches do Chromium p/ execução em 2º plano, desktop ID
 │   ├── notifications.ts   NotificationManager: clique → restaurar janela, contagem
+│   ├── autostart.ts       AutostartManager: ~/.config/autostart/<id>.desktop (+ inotify)
+│   ├── settings.ts        SettingsStore: settings.json tipado, escrita atômica
+│   ├── desktop-integration.ts  lançador + ícones hicolor em ~/.local/share
+│   ├── desktop-entry.ts   gerar/ler .desktop (quoting do Exec conforme a spec)
+│   ├── launch.ts          comando que inicia esta instalação (dev, AppImage, .deb)
+│   ├── cli.ts / xdg.ts    flags de linha de comando, diretórios XDG
 │   ├── lifecycle.ts       instância única, flush da sessão no quit, flag "quitting"
 │   ├── session.ts         partição persist:whatsapp + política de permissões
 │   ├── window.ts          WindowManager: criar/mostrar/ocultar, X → ocultar, navegação, recuperação
@@ -71,7 +82,7 @@ gerados por `python3 scripts/generate-icons.py` (requer Pillow).
 - **Encerrar de verdade:** menu da bandeja → *Sair*, ou **Ctrl+Q** na janela.
 - **Clique no ícone** da bandeja: abre e foca a janela.
 - **Menu:** contador de conversas não lidas · Abrir WhatsApp · Ocultar janela ·
-  Iniciar com o sistema (desabilitado até a Fase 4) · Sair.
+  Iniciar com o sistema · Sair.
 - O ícone ganha um ponto vermelho quando há conversas não lidas. A contagem é
   lida do título público da página (`(3) WhatsApp`), sem acessar nada interno
   do WhatsApp.
@@ -99,6 +110,41 @@ Partição `persist:whatsapp` em `~/.config/wa-gnome/Partitions/whatsapp`
 (cookies, IndexedDB com as chaves do dispositivo, Service Worker). Os dados
 são gravados no disco com `flushStorageData()` antes de sair. Uma única
 instância é permitida: dois processos no mesmo perfil podem corromper o LevelDB.
+
+## Inicialização automática e configurações
+
+- **Iniciar com o sistema** (menu da bandeja) cria ou remove
+  `~/.config/autostart/io.github.wagnome.WaGnome.desktop`, seguindo a spec XDG
+  Autostart que o GNOME implementa.
+- **O estado vem do próprio arquivo.** Se você desativar pelo GNOME Tweaks
+  (`X-GNOME-Autostart-enabled=false` ou `Hidden=true`) ou apagar o arquivo, o
+  menu se atualiza na hora (inotify).
+- **No login, o app abre com `--hidden`:** só o ícone da bandeja aparece. A
+  página carrega como `hidden` (`paintWhenInitiallyHidden: false`), com as
+  notificações funcionando e sem marcar como lida a conversa aberta. Abrir o
+  app de novo pelo lançador traz a janela.
+- **`X-GNOME-Autostart-Delay=3`** dá tempo para a extensão AppIndicator
+  registrar a bandeja.
+- **Correção automática:** se o caminho de execução mudar (AppImage movido,
+  outro checkout), o `Exec` é reescrito na próxima inicialização.
+- **Comando no `Exec`:** em dev, `electron <projeto>`; num AppImage, o caminho
+  do `.AppImage` (`$APPIMAGE`, não o ponto de montagem temporário); empacotado,
+  o executável instalado.
+
+**Configurações** ficam em `~/.config/wa-gnome/settings.json`, com chaves
+validadas, escrita atômica e um arquivo corrompido movido para `.corrupt`:
+
+| Chave | Padrão | Efeito |
+|-------|--------|--------|
+| `startHiddenOnLogin` | `true` | autostart inicia com `--hidden` |
+
+**Lançador (`npm run desktop:install`):** instala
+`~/.local/share/applications/io.github.wagnome.WaGnome.desktop` e os ícones
+em `~/.local/share/icons/hicolor/*/apps/`. Com isso o app aparece no menu de
+aplicativos, o dock agrupa a janela pelo `app_id` do Wayland e as notificações
+passam a mostrar nome e ícone. A entrada passa pelo `desktop-file-validate` e
+é encontrada pelo `Gio.DesktopAppInfo`. O pacote `.deb` (Fase 5) traz a sua
+própria entrada no sistema.
 
 ## Notificações
 
@@ -140,8 +186,8 @@ estado de uma aba do Chrome em segundo plano, mas sem limitar os timers.
 
 ### Limitações
 - **O processo precisa estar rodando.** Sem Web Push no Electron, não há
-  notificação depois de *Sair*, antes do login no sistema (a Fase 4 resolve com
-  autostart) ou durante a suspensão. Ao acordar, o WhatsApp reconecta e entrega
+  notificação depois de *Sair* ou durante a suspensão. Com *Iniciar com o
+  sistema* ativo, o app já está rodando após o login. Ao acordar, o WhatsApp reconecta e entrega
   as pendentes.
 - **Sem Push, não há alternativa oficial** para receber notificações com o
   processo encerrado: o WhatsApp não oferece uma API pública para isso.

@@ -15,6 +15,7 @@ export interface WindowManagerOptions {
   session: Session
   preloadPath: string
   iconPath: string
+  startHidden?: boolean
   onVisibilityChanged?: (visible: boolean) => void
   onUnreadChanged?: (count: number) => void
   onHiddenByClose?: () => void
@@ -43,6 +44,7 @@ export class WindowManager {
       title: 'WhatsApp',
       icon: this.options.iconPath,
       show: false,
+      paintWhenInitiallyHidden: !this.options.startHidden,
       backgroundColor: '#111b21',
       autoHideMenuBar: true,
       webPreferences: {
@@ -58,7 +60,9 @@ export class WindowManager {
     })
     this.window = win
 
-    win.once('ready-to-show', () => win.show())
+    win.once('ready-to-show', () => {
+      if (!this.options.startHidden) win.show()
+    })
 
     win.on('close', (event) => {
       if (isQuitting()) return

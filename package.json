@@ -13,7 +13,9 @@
     "start": "env -u ELECTRON_RUN_AS_NODE electron-vite preview --skipBuild",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run build",
+    "desktop:install": "npm run build && env -u ELECTRON_RUN_AS_NODE electron . --install-desktop-entry",
+    "desktop:uninstall": "env -u ELECTRON_RUN_AS_NODE electron . --uninstall-desktop-entry"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

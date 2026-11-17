@@ -14,14 +14,14 @@ export function quit(): void {
   app.quit()
 }
 
-export function acquireSingleInstance(onSecondInstance: () => void): boolean {
+export function acquireSingleInstance(onSecondInstance: (argv: string[]) => void): boolean {
   if (!app.requestSingleInstanceLock()) {
     log.info('another instance is running; handing over and exiting')
     return false
   }
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     log.info('second instance launched; focusing existing window')
-    onSecondInstance()
+    onSecondInstance(argv)
   })
   return true
 }
