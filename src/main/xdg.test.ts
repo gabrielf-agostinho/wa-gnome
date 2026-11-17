@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { xdgConfigHome, xdgDataHome } from './xdg'
+import { xdgConfigHome, xdgDataHome, xdgStateHome } from './xdg'
 
 describe('xdg dirs', () => {
   it('uses the environment when absolute', () => {
@@ -11,5 +11,7 @@ describe('xdg dirs', () => {
     expect(xdgConfigHome({ HOME: '/h' })).toBe('/h/.config')
     expect(xdgConfigHome({ XDG_CONFIG_HOME: 'rel', HOME: '/h' })).toBe('/h/.config')
     expect(xdgDataHome({ HOME: '/h' })).toBe('/h/.local/share')
+    expect(xdgStateHome({ HOME: '/h' })).toBe('/h/.local/state')
+    expect(xdgStateHome({ XDG_STATE_HOME: '/x/state', HOME: '/h' })).toBe('/x/state')
   })
 })

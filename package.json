@@ -2,6 +2,7 @@
   "name": "wa-gnome",
   "version": "0.1.0",
   "description": "WhatsApp Web desktop wrapper with native GNOME integration (tray, background notifications, autostart)",
+  "homepage": "https://github.com/wagnome/wa-gnome",
   "main": "./out/main/index.js",
   "author": "Gabriel Agostinho",
   "license": "MIT",
@@ -15,11 +16,16 @@
     "test": "vitest run",
     "check": "npm run typecheck && npm test && npm run build",
     "desktop:install": "npm run build && env -u ELECTRON_RUN_AS_NODE electron . --install-desktop-entry",
-    "desktop:uninstall": "env -u ELECTRON_RUN_AS_NODE electron . --uninstall-desktop-entry"
+    "desktop:uninstall": "env -u ELECTRON_RUN_AS_NODE electron . --uninstall-desktop-entry",
+    "dist": "npm run check && umask 022 && electron-builder --linux",
+    "dist:appimage": "npm run check && umask 022 && electron-builder --linux AppImage",
+    "dist:deb": "npm run check && umask 022 && electron-builder --linux deb",
+    "dist:dir": "npm run build && umask 022 && electron-builder --linux dir"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
     "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",

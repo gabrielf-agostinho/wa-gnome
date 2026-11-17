@@ -8,6 +8,7 @@ const log = createLogger('autostart')
 export interface AutostartOptions {
   autostartDir: string
   desktopId: string
+  iconName: string
   launchCommand: () => string[]
   loginArgs: () => string[]
 }
@@ -82,7 +83,7 @@ export class AutostartManager {
       GenericName: 'WhatsApp',
       Comment: 'Mantém o WhatsApp Web em segundo plano para receber notificações',
       Exec: this.exec(),
-      Icon: this.options.desktopId,
+      Icon: this.options.iconName,
       Terminal: false,
       NoDisplay: false,
       StartupNotify: false,

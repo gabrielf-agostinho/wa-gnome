@@ -13,7 +13,7 @@ Stack: Electron 45 (Chromium 156, Node 24) · TypeScript 7 (strict) · electron-
 | 2 | Bandeja, fechar → ocultar, Sair | ✅ implementada |
 | 3 | Notificações com a janela oculta | ✅ implementada (falta validar com mensagem real) |
 | 4 | Autostart (`~/.config/autostart`), configurações, lançador | ✅ implementada |
-| 5 | Logs em arquivo, AppImage/.deb | pendente |
+| 5 | Logs em arquivo, erros, AppImage/.deb | ✅ implementada (falta instalar o .deb) |
 
 ## Desenvolvimento
 
@@ -27,11 +27,14 @@ npm test           # vitest
 npm run check      # typecheck + test + build
 npm run desktop:install    # instala o lançador + ícones em ~/.local/
 npm run desktop:uninstall  # remove
+npm run dist               # check + AppImage e .deb em dist/
+npm run dist:appimage      # só AppImage (também: dist:deb, dist:dir)
 ```
 
 Flags de linha de comando: `--hidden` inicia só na bandeja (usado pelo
 autostart), `--install-desktop-entry` e `--uninstall-desktop-entry`.
 
+Logs: `~/.local/state/wa-gnome/wa-gnome.log` (ver [Logs e erros](#logs-e-erros)).
 `WA_GNOME_DEBUG=1 npm start` ativa logs de debug e o menu padrão do Electron
 (Ctrl+Shift+I abre o DevTools).
 
@@ -57,7 +60,7 @@ src/
 │   ├── desktop-entry.ts   gerar/ler .desktop (quoting do Exec conforme a spec)
 │   ├── launch.ts          comando que inicia esta instalação (dev, AppImage, .deb)
 │   ├── cli.ts / xdg.ts    flags de linha de comando, diretórios XDG
-│   ├── lifecycle.ts       instância única, flush da sessão no quit, flag "quitting"
+│   ├── lifecycle.ts       instância única, flush da sessão no quit, log de crashes
 │   ├── session.ts         partição persist:whatsapp + política de permissões
 │   ├── window.ts          WindowManager: criar/mostrar/ocultar, X → ocultar, navegação, recuperação
 │   ├── tray.ts            TrayManager: ícone, menu, contador de não lidas
@@ -66,7 +69,7 @@ src/
 │   ├── user-agent.ts      remove o token "wa-gnome/x.y.z" do UA
 │   ├── context-menu.ts    menu de contexto de edição + corretor ortográfico
 │   ├── policy.ts          regras puras (URLs, permissões) — testadas
-│   └── logger.ts
+│   └── logger.ts          console + arquivo com rotação (~/.local/state/wa-gnome)
 └── preload/
     ├── index.ts               sandbox + contextIsolation; instala o observador
     └── notification-observer.ts  observa show/click da Notification padrão
@@ -76,6 +79,8 @@ Não há `src/renderer/`: a interface é o próprio `https://web.whatsapp.com/`.
 
 Ícones em `resources/icons/` são arte original (não o logo do WhatsApp),
 gerados por `python3 scripts/generate-icons.py` (requer Pillow).
+Empacotamento: [electron-builder.yml](electron-builder.yml) e
+[scripts/after-pack.cjs](scripts/after-pack.cjs).
 
 ### Janela e bandeja
 - **X** oculta a janela; o processo, a conexão e as notificações continuam.
@@ -143,8 +148,58 @@ validadas, escrita atômica e um arquivo corrompido movido para `.corrupt`:
 em `~/.local/share/icons/hicolor/*/apps/`. Com isso o app aparece no menu de
 aplicativos, o dock agrupa a janela pelo `app_id` do Wayland e as notificações
 passam a mostrar nome e ícone. A entrada passa pelo `desktop-file-validate` e
-é encontrada pelo `Gio.DesktopAppInfo`. O pacote `.deb` (Fase 5) traz a sua
-própria entrada no sistema.
+é encontrada pelo `Gio.DesktopAppInfo`. O pacote `.deb` traz a sua própria
+entrada em `/usr/share/applications`. No AppImage, rode
+`./wa-gnome-<versão>-x86_64.AppImage --install-desktop-entry`.
+
+## Logs e erros
+
+- **Arquivo:** `~/.local/state/wa-gnome/wa-gnome.log` (`$XDG_STATE_HOME`),
+  pasta 0700 e arquivo 0600. Gira em 1 MiB e mantém 3 arquivos antigos
+  (`.1`–`.3`). Também vai para o terminal.
+- **O que entra:** início (versões, Wayland/X11), janela mostrada/oculta,
+  bandeja, autostart, falhas de carregamento com nova tentativa, renderer
+  travado ou encerrado, processos filhos (GPU, rede) que caem, exceções não
+  tratadas. Nunca o conteúdo das mensagens.
+- **Erro fatal na inicialização:** uma caixa de diálogo mostra o erro e o
+  caminho do log, e o app sai com código 1.
+- **Encerramento:** "Sair", Ctrl+Q e SIGTERM (logout, `kill`) passam pelo
+  `before-quit`, que grava a sessão em disco. O próprio Electron trata
+  SIGTERM/SIGINT com um encerramento ordenado (verificado: `kill -TERM` gera
+  "quitting" no log e sai sem processos restantes).
+
+## Pacotes (AppImage e .deb)
+
+```bash
+npm run dist     # typecheck + testes + build + electron-builder
+ls dist/         # wa-gnome-0.1.0-x86_64.AppImage, wa-gnome_0.1.0_amd64.deb
+```
+
+**.deb**: `sudo apt install ./dist/wa-gnome_0.1.0_amd64.deb`
+
+- Instala em `/opt/wa-gnome`, com o link `/usr/bin/wa-gnome`, a entrada
+  `/usr/share/applications/io.github.wagnome.WaGnome.desktop` e os ícones
+  `hicolor/*/apps/wa-gnome.png`.
+- O `postinst` instala o perfil AppArmor `/etc/apparmor.d/wa-gnome` (só
+  `userns`, sem confinamento). O Ubuntu 24.04+ exige isso para o sandbox do
+  Chromium (`kernel.apparmor_restrict_unprivileged_userns=1`). O perfil passa
+  no `apparmor_parser` desta máquina.
+- Dependências conferidas com `apt-get install -s` no 26.04 (os nomes antigos
+  são fornecidos pelos pacotes `t64`).
+- Remover: `sudo apt remove wa-gnome`.
+
+**AppImage**: `chmod +x` e execute.
+
+- Usa o runtime estático (`toolsets.appimage: 1.0.3`), porque o Ubuntu 24.04+
+  não instala mais a `libfuse2` que o runtime antigo exige.
+- O sandbox continua ativo: renderers em user/PID namespaces próprios e
+  seccomp em modo filtro, verificado em `/proc` no 26.04.
+- O autostart e o lançador usam o caminho do AppImage (`$APPIMAGE`). Se mover
+  o arquivo, o autostart se corrige na próxima execução. O lançador, não: rode
+  `--install-desktop-entry` de novo.
+
+**Antes de distribuir**: troque o `maintainer` provisório em
+`electron-builder.yml` e o `homepage` em `package.json`.
 
 ## Notificações
 
@@ -217,3 +272,8 @@ estado de uma aba do Chrome em segundo plano, mas sem limitar os timers.
   (prevenção de roubo de foco) e mostrar "WhatsApp está pronto" em vez de
   trazê-la para frente. Se isso acontecer ao clicar no ícone da bandeja, é essa
   política do compositor.
+- **Logout encerra todos os processos de uma vez:** o systemd manda SIGTERM ao
+  escopo inteiro, então os processos filhos (GPU e rede) morrem junto com o
+  principal. O Chromium pode registrar "GPU process isn't usable. Goodbye." e
+  sair com erro. Isso acontece depois do `before-quit`, ou seja, depois de a
+  sessão ser gravada em disco.

@@ -3,3 +3,4 @@ export const WHATSAPP_ORIGIN = 'https://web.whatsapp.com'
 export const SESSION_PARTITION = 'persist:whatsapp'
 export const APP_ID = 'wa-gnome'
 export const DESKTOP_ID = 'io.github.wagnome.WaGnome'
+export const ICON_NAME = APP_ID

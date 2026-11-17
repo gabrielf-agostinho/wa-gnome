@@ -15,3 +15,7 @@ export function xdgConfigHome(env: Env = process.env): string {
 export function xdgDataHome(env: Env = process.env): string {
   return base(env, 'XDG_DATA_HOME', join('.local', 'share'))
 }
+
+export function xdgStateHome(env: Env = process.env): string {
+  return base(env, 'XDG_STATE_HOME', join('.local', 'state'))
+}

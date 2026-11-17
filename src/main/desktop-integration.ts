@@ -10,6 +10,7 @@ export const ICON_SIZES = [32, 48, 64, 128, 256, 512] as const
 export interface DesktopIntegrationOptions {
   dataHome: string
   desktopId: string
+  iconName: string
   launchCommand: string[]
   iconSourceDir: string
 }
@@ -22,7 +23,7 @@ export class DesktopIntegration {
   }
 
   private iconPath(size: number): string {
-    return join(this.options.dataHome, 'icons', 'hicolor', `${size}x${size}`, 'apps', `${this.options.desktopId}.png`)
+    return join(this.options.dataHome, 'icons', 'hicolor', `${size}x${size}`, 'apps', `${this.options.iconName}.png`)
   }
 
   install(): string[] {
@@ -45,7 +46,7 @@ export class DesktopIntegration {
       GenericName: 'WhatsApp',
       Comment: 'WhatsApp Web com bandeja e notificações em segundo plano',
       Exec: buildExec(this.options.launchCommand),
-      Icon: this.options.desktopId,
+      Icon: this.options.iconName,
       Terminal: false,
       Categories: 'Network;InstantMessaging;Chat;',
       Keywords: 'WhatsApp;chat;mensagens;messenger;',

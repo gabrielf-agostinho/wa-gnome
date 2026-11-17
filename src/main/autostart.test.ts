@@ -11,6 +11,7 @@ function setup(command = ['/opt/wa gnome/wa-gnome'], loginArgs = ['--hidden']) {
   const manager = new AutostartManager({
     autostartDir: dir,
     desktopId: 'io.example.App',
+    iconName: 'example-app',
     launchCommand: () => state.command,
     loginArgs: () => state.loginArgs
   })

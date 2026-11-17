@@ -41,4 +41,9 @@ export function installShutdownHooks(getSession: () => Session | null): void {
 export function installCrashLogging(): void {
   process.on('uncaughtException', (error) => log.error('uncaught exception', error))
   process.on('unhandledRejection', (reason) => log.error('unhandled rejection', reason))
+  app.on('child-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit') return
+    if (quitting) return log.info(`${details.type} process ended during shutdown: ${details.reason}`)
+    log.error(`${details.type} process gone: ${details.reason} (exit ${details.exitCode})`)
+  })
 }

@@ -1,13 +1,18 @@
 import { join } from 'node:path'
-import { app, Menu, Notification, type Session } from 'electron'
-import { DESKTOP_ID } from '../shared/constants'
+import { app, dialog, Menu, Notification, type Session } from 'electron'
+import { APP_ID, DESKTOP_ID, ICON_NAME } from '../shared/constants'
 import { AutostartManager } from './autostart'
 import { configureBackgroundExecution, configureDesktopIdentity } from './background'
 import { HIDDEN_FLAG, parseCliFlags } from './cli'
 import { DesktopIntegration } from './desktop-integration'
 import { resolveLaunchCommand } from './launch'
-import { acquireSingleInstance, installCrashLogging, installShutdownHooks, quit } from './lifecycle'
-import { createLogger } from './logger'
+import {
+  acquireSingleInstance,
+  installCrashLogging,
+  installShutdownHooks,
+  quit
+} from './lifecycle'
+import { createLogger, enableFileLogging, logFilePath } from './logger'
 import { NotificationManager } from './notifications'
 import { SettingsStore } from './settings'
 import { createWhatsAppSession } from './session'
@@ -15,7 +20,7 @@ import { TrayManager } from './tray'
 import { detectTrayHost, type TrayHostStatus } from './tray-support'
 import { stripAppToken } from './user-agent'
 import { WindowManager } from './window'
-import { xdgConfigHome, xdgDataHome } from './xdg'
+import { xdgConfigHome, xdgDataHome, xdgStateHome } from './xdg'
 
 const log = createLogger('main')
 
@@ -30,12 +35,18 @@ let autostart: AutostartManager | null = null
 
 const flags = parseCliFlags(process.argv)
 
+try {
+  enableFileLogging(join(xdgStateHome(), APP_ID, 'wa-gnome.log'))
+} catch (error) {
+  console.error('could not open log file', error)
+}
 installCrashLogging()
 configureDesktopIdentity()
 configureBackgroundExecution()
 
 function resource(...parts: string[]): string {
-  return join(__dirname, '..', '..', 'resources', ...parts)
+  const base = app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..')
+  return join(base, 'resources', ...parts)
 }
 
 function notifyUser(title: string, body: string): void {
@@ -56,6 +67,7 @@ function desktopIntegration(): DesktopIntegration {
   return new DesktopIntegration({
     dataHome: xdgDataHome(),
     desktopId: DESKTOP_ID,
+    iconName: ICON_NAME,
     launchCommand: resolveLaunchCommand(),
     iconSourceDir: resource('icons')
   })
@@ -87,6 +99,7 @@ async function start(): Promise<void> {
   autostart = new AutostartManager({
     autostartDir: join(xdgConfigHome(), 'autostart'),
     desktopId: DESKTOP_ID,
+    iconName: ICON_NAME,
     launchCommand: resolveLaunchCommand,
     loginArgs: () => (settings?.get('startHiddenOnLogin') ? [HIDDEN_FLAG] : [])
   })
@@ -167,6 +180,11 @@ if (flags.installDesktopEntry || flags.uninstallDesktopEntry) {
     .then(start)
     .catch((error: unknown) => {
       log.error('fatal startup error', error)
+      const where = logFilePath()
+      dialog.showErrorBox(
+        'wa-gnome não pôde iniciar',
+        `${error instanceof Error ? error.message : String(error)}${where ? `\n\nDetalhes em ${where}` : ''}`
+      )
       app.exit(1)
     })
 }

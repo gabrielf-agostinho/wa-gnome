@@ -1,0 +1,47 @@
+appId: io.github.wagnome.WaGnome
+productName: wa-gnome
+copyright: Copyright © 2026 Gabriel Agostinho
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**/*
+  - '!**/*.map'
+extraResources:
+  - from: resources
+    to: resources
+asar: true
+npmRebuild: false
+afterPack: scripts/after-pack.cjs
+
+linux:
+  target:
+    - AppImage
+    - deb
+  executableName: wa-gnome
+  category: Network;InstantMessaging;Chat
+  syncDesktopName: true
+  icon: resources/icons
+  synopsis: WhatsApp Web com bandeja e notificações em segundo plano
+  description: WhatsApp Web com bandeja e notificações em segundo plano
+  desktop:
+    entry:
+      GenericName: WhatsApp
+      Comment: WhatsApp Web com bandeja e notificações em segundo plano
+      Keywords: WhatsApp;chat;mensagens;messenger;
+      StartupNotify: 'true'
+      SingleMainWindow: 'true'
+
+toolsets:
+  appimage: 1.0.3
+
+appImage:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+deb:
+  packageCategory: net
+  recommends: []
+  maintainer: Gabriel Agostinho <g.felipeagostinho@gmail.com>
+  artifactName: ${productName}_${version}_${arch}.${ext}

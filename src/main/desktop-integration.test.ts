@@ -13,6 +13,7 @@ function setup() {
   const di = new DesktopIntegration({
     dataHome: join(root, 'share'),
     desktopId: 'io.example.App',
+    iconName: 'example-app',
     launchCommand: ['/usr/bin/electron', '/src/app'],
     iconSourceDir: icons
   })
@@ -26,9 +27,9 @@ describe('DesktopIntegration', () => {
     expect(written).toHaveLength(ICON_SIZES.length + 1)
     const entry = parseDesktopEntry(readFileSync(di.entryPath, 'utf8'))
     expect(entry.get('Exec')).toBe('/usr/bin/electron /src/app')
-    expect(entry.get('Icon')).toBe('io.example.App')
+    expect(entry.get('Icon')).toBe('example-app')
     expect(entry.get('StartupWMClass')).toBe('io.example.App')
-    expect(readFileSync(join(root, 'share/icons/hicolor/128x128/apps/io.example.App.png'), 'utf8')).toBe('png128')
+    expect(readFileSync(join(root, 'share/icons/hicolor/128x128/apps/example-app.png'), 'utf8')).toBe('png128')
   })
 
   it('uninstalls everything it installed', () => {
