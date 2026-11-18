@@ -2,7 +2,7 @@
   "name": "wa-gnome",
   "version": "0.1.0",
   "description": "WhatsApp Web desktop wrapper with native GNOME integration (tray, background notifications, autostart)",
-  "homepage": "https://github.com/wagnome/wa-gnome",
+  "homepage": "https://github.com/gabrielf-agostinho/wa-gnome",
   "main": "./out/main/index.js",
   "author": "Gabriel Agostinho",
   "license": "MIT",
