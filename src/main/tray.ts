@@ -1,16 +1,25 @@
 import { Menu, nativeImage, Tray, type NativeImage } from 'electron'
+import { STRINGS } from '../shared/strings'
 import { createLogger } from './logger'
 import { describeUnread } from './unread'
 
 const log = createLogger('tray')
 
-export interface TrayActions {
+export interface WindowControls {
   show(): void
   hide(): void
+  isVisible(): boolean
+}
+
+export interface AutostartToggle {
+  isEnabled(): boolean
+  setEnabled(enabled: boolean): void
+}
+
+export interface TrayDependencies {
+  window: WindowControls
+  autostart: AutostartToggle
   quit(): void
-  isWindowVisible(): boolean
-  isAutostartEnabled(): boolean
-  setAutostartEnabled(enabled: boolean): void
 }
 
 export interface TrayIcons {
@@ -24,7 +33,7 @@ export class TrayManager {
   private readonly images: { normal: NativeImage; unread: NativeImage }
 
   constructor(
-    private readonly actions: TrayActions,
+    private readonly deps: TrayDependencies,
     icons: TrayIcons
   ) {
     this.images = {
@@ -38,7 +47,7 @@ export class TrayManager {
     if (this.tray) return
     this.tray = new Tray(this.images.normal)
     this.tray.setTitle('')
-    this.tray.on('click', () => this.actions.show())
+    this.tray.on('click', () => this.deps.window.show())
     this.refresh()
     log.info('tray icon created')
   }
@@ -53,27 +62,28 @@ export class TrayManager {
     const tray = this.tray
     if (!tray || tray.isDestroyed()) return
 
-    const visible = this.actions.isWindowVisible()
+    const { window, autostart } = this.deps
+    const summary = describeUnread(this.unread)
     tray.setImage(this.unread > 0 ? this.images.unread : this.images.normal)
-    tray.setToolTip(`WhatsApp — ${describeUnread(this.unread)}`)
+    tray.setToolTip(STRINGS.tray.tooltip(summary))
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: describeUnread(this.unread), enabled: false },
+        { label: summary, enabled: false },
         { type: 'separator' },
-        { label: 'Abrir WhatsApp', click: () => this.actions.show() },
-        { label: 'Ocultar janela', enabled: visible, click: () => this.actions.hide() },
+        { label: STRINGS.tray.open, click: () => window.show() },
+        { label: STRINGS.tray.hide, enabled: window.isVisible(), click: () => window.hide() },
         { type: 'separator' },
         {
-          label: 'Iniciar com o sistema',
+          label: STRINGS.tray.autostart,
           type: 'checkbox',
-          checked: this.actions.isAutostartEnabled(),
+          checked: autostart.isEnabled(),
           click: (item) => {
-            this.actions.setAutostartEnabled(item.checked)
+            autostart.setEnabled(item.checked)
             this.refresh()
           }
         },
         { type: 'separator' },
-        { label: 'Sair', click: () => this.actions.quit() }
+        { label: STRINGS.tray.quit, click: () => this.deps.quit() }
       ])
     )
   }

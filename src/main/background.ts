@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import { DESKTOP_ID } from '../shared/constants'
+import { desktopFileName } from './desktop-entry'
 
 export function configureBackgroundExecution(): void {
   app.commandLine.appendSwitch('disable-background-timer-throttling')
@@ -7,5 +8,5 @@ export function configureBackgroundExecution(): void {
 }
 
 export function configureDesktopIdentity(): void {
-  app.setDesktopName(`${DESKTOP_ID}.desktop`)
+  app.setDesktopName(desktopFileName(DESKTOP_ID))
 }

@@ -14,27 +14,30 @@ export function quit(): void {
   app.quit()
 }
 
-export function acquireSingleInstance(onSecondInstance: (argv: string[]) => void): boolean {
-  if (!app.requestSingleInstanceLock()) {
-    log.info('another instance is running; handing over and exiting')
-    return false
-  }
-  app.on('second-instance', (_event, argv) => {
-    log.info('second instance launched; focusing existing window')
-    onSecondInstance(argv)
-  })
-  return true
-}
-
-export function installShutdownHooks(getSession: () => Session | null): void {
+export function installQuitTracking(): void {
   app.on('before-quit', () => {
     quitting = true
-    const ses = getSession()
-    if (ses) {
-      ses.flushStorageData()
-      ses.cookies.flushStore().catch((error: unknown) => log.warn('cookie flush failed', error))
-    }
     log.info('quitting')
+  })
+}
+
+export function acquireSingleInstance(): boolean {
+  if (app.requestSingleInstanceLock()) return true
+  log.info('another instance is running; handing over and exiting')
+  return false
+}
+
+export function onSecondInstance(handler: (argv: string[]) => void): void {
+  app.on('second-instance', (_event, argv) => {
+    log.info('second instance launched; focusing existing window')
+    handler(argv)
+  })
+}
+
+export function flushSessionOnQuit(ses: Session): void {
+  app.on('before-quit', () => {
+    ses.flushStorageData()
+    ses.cookies.flushStore().catch((error: unknown) => log.warn('cookie flush failed', error))
   })
 }
 

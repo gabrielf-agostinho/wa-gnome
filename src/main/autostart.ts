@@ -1,6 +1,15 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, watch, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
-import { buildDesktopEntry, buildExec, isAutostartEntryEnabled, parseDesktopEntry } from './desktop-entry'
+import { STRINGS } from '../shared/strings'
+import {
+  baseDesktopFields,
+  buildDesktopEntry,
+  buildExec,
+  desktopFileName,
+  isAutostartEntryEnabled,
+  parseDesktopEntry
+} from './desktop-entry'
+import { writeFileAtomic } from './fs-utils'
 import { createLogger } from './logger'
 
 const log = createLogger('autostart')
@@ -32,12 +41,15 @@ export class AutostartManager {
     if (this.debounce) clearTimeout(this.debounce)
   }
 
+  private get fileName(): string {
+    return desktopFileName(this.options.desktopId)
+  }
+
   private startWatching(): void {
     if (this.watcher || !this.onChange) return
-    const fileName = `${this.options.desktopId}.desktop`
     try {
       this.watcher = watch(this.options.autostartDir, (_event, name) => {
-        if (name !== fileName) return
+        if (name !== this.fileName) return
         if (this.debounce) clearTimeout(this.debounce)
         this.debounce = setTimeout(() => this.onChange?.(), 150)
       })
@@ -45,12 +57,13 @@ export class AutostartManager {
         this.watcher?.close()
         this.watcher = null
       })
-    } catch {
+    } catch (error) {
+      log.debug(`cannot watch ${this.options.autostartDir} yet`, error)
     }
   }
 
   get filePath(): string {
-    return join(this.options.autostartDir, `${this.options.desktopId}.desktop`)
+    return join(this.options.autostartDir, this.fileName)
   }
 
   isEnabled(): boolean {
@@ -78,13 +91,9 @@ export class AutostartManager {
 
   private write(): void {
     const content = buildDesktopEntry({
-      Type: 'Application',
-      Name: 'wa-gnome',
-      GenericName: 'WhatsApp',
-      Comment: 'Mantém o WhatsApp Web em segundo plano para receber notificações',
+      ...baseDesktopFields(this.options.iconName),
+      Comment: STRINGS.desktopEntry.autostartComment,
       Exec: this.exec(),
-      Icon: this.options.iconName,
-      Terminal: false,
       NoDisplay: false,
       StartupNotify: false,
       'X-GNOME-Autostart-enabled': true,
@@ -92,9 +101,7 @@ export class AutostartManager {
     })
     mkdirSync(this.options.autostartDir, { recursive: true })
     this.startWatching()
-    const tmp = `${this.filePath}.tmp`
-    writeFileSync(tmp, content, { mode: 0o644 })
-    renameSync(tmp, this.filePath)
+    writeFileAtomic(this.filePath, content, 0o644)
     log.info(`autostart enabled: ${this.filePath}`)
   }
 

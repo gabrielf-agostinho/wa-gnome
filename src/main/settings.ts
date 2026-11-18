@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { readFileSync, renameSync } from 'node:fs'
+import { writeFileAtomic } from './fs-utils'
 import { createLogger } from './logger'
 
 const log = createLogger('settings')
@@ -34,10 +34,6 @@ export class SettingsStore {
     return this.current[key]
   }
 
-  getAll(): Readonly<Settings> {
-    return { ...this.current }
-  }
-
   set<K extends keyof Settings>(key: K, value: Settings[K]): void {
     if (this.current[key] === value) return
     this.current = { ...this.current, [key]: value }
@@ -58,16 +54,14 @@ export class SettingsStore {
       log.warn(`corrupt settings file; moved to ${this.filePath}.corrupt and using defaults`)
       try {
         renameSync(this.filePath, `${this.filePath}.corrupt`)
-      } catch {
+      } catch (error) {
+        log.debug('could not move corrupt settings file aside', error)
       }
       return { ...DEFAULT_SETTINGS }
     }
   }
 
   private write(): void {
-    const tmp = `${this.filePath}.tmp`
-    mkdirSync(dirname(this.filePath), { recursive: true })
-    writeFileSync(tmp, JSON.stringify(this.current, null, 2) + '\n', { mode: 0o600 })
-    renameSync(tmp, this.filePath)
+    writeFileAtomic(this.filePath, JSON.stringify(this.current, null, 2) + '\n', 0o600)
   }
 }

@@ -19,7 +19,7 @@ describe('SettingsStore', () => {
   it('uses defaults when the file is missing and does not create it on read', () => {
     const file = tempFile()
     const store = new SettingsStore(file)
-    expect(store.getAll()).toEqual(DEFAULT_SETTINGS)
+    expect(store.get('startHiddenOnLogin')).toBe(DEFAULT_SETTINGS.startHiddenOnLogin)
     expect(existsSync(file)).toBe(false)
   })
 
@@ -35,7 +35,7 @@ describe('SettingsStore', () => {
     const file = tempFile()
     writeFileSync(file, '{ not json')
     const store = new SettingsStore(file)
-    expect(store.getAll()).toEqual(DEFAULT_SETTINGS)
+    expect(store.get('startHiddenOnLogin')).toBe(DEFAULT_SETTINGS.startHiddenOnLogin)
     expect(readFileSync(`${file}.corrupt`, 'utf8')).toBe('{ not json')
   })
 })

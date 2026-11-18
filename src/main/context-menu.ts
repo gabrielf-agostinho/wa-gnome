@@ -1,4 +1,7 @@
 import { Menu, type MenuItemConstructorOptions, type WebContents } from 'electron'
+import { STRINGS } from '../shared/strings'
+
+const T = STRINGS.contextMenu
 
 export function attachContextMenu(wc: WebContents): void {
   wc.on('context-menu', (_event, params) => {
@@ -10,7 +13,7 @@ export function attachContextMenu(wc: WebContents): void {
       }
       items.push(
         {
-          label: 'Adicionar ao dicionário',
+          label: T.addToDictionary,
           click: () => wc.session.addWordToSpellCheckerDictionary(params.misspelledWord)
         },
         { type: 'separator' }
@@ -20,14 +23,14 @@ export function attachContextMenu(wc: WebContents): void {
     const { editFlags } = params
     if (params.isEditable) {
       items.push(
-        { role: 'cut', label: 'Recortar', enabled: editFlags.canCut },
-        { role: 'copy', label: 'Copiar', enabled: editFlags.canCopy },
-        { role: 'paste', label: 'Colar', enabled: editFlags.canPaste },
+        { role: 'cut', label: T.cut, enabled: editFlags.canCut },
+        { role: 'copy', label: T.copy, enabled: editFlags.canCopy },
+        { role: 'paste', label: T.paste, enabled: editFlags.canPaste },
         { type: 'separator' },
-        { role: 'selectAll', label: 'Selecionar tudo', enabled: editFlags.canSelectAll }
+        { role: 'selectAll', label: T.selectAll, enabled: editFlags.canSelectAll }
       )
     } else if (params.selectionText.trim().length > 0) {
-      items.push({ role: 'copy', label: 'Copiar' })
+      items.push({ role: 'copy', label: T.copy })
     }
 
     if (items.length > 0) Menu.buildFromTemplate(items).popup()

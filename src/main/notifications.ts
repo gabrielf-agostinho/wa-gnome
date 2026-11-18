@@ -16,25 +16,25 @@ export class NotificationManager {
   constructor(private readonly options: NotificationManagerOptions) {}
 
   start(): void {
-    ipcMain.on(IPC.notificationShown, (event) => {
-      if (!this.isTrusted(event)) return
-      this.delivered += 1
-      log.info(`notification delivered (#${this.delivered} this session)`)
-    })
-    ipcMain.on(IPC.notificationClicked, (event) => {
-      if (!this.isTrusted(event)) return
-      log.info('notification clicked; restoring window')
-      this.options.activate()
-    })
-  }
-
-  get deliveredCount(): number {
-    return this.delivered
+    ipcMain.on(IPC.notificationShown, this.handleShown)
+    ipcMain.on(IPC.notificationClicked, this.handleClicked)
   }
 
   stop(): void {
-    ipcMain.removeAllListeners(IPC.notificationShown)
-    ipcMain.removeAllListeners(IPC.notificationClicked)
+    ipcMain.removeListener(IPC.notificationShown, this.handleShown)
+    ipcMain.removeListener(IPC.notificationClicked, this.handleClicked)
+  }
+
+  private readonly handleShown = (event: IpcMainEvent): void => {
+    if (!this.isTrusted(event)) return
+    this.delivered += 1
+    log.info(`notification delivered (#${this.delivered} this session)`)
+  }
+
+  private readonly handleClicked = (event: IpcMainEvent): void => {
+    if (!this.isTrusted(event)) return
+    log.info('notification clicked; restoring window')
+    this.options.activate()
   }
 
   private isTrusted(event: IpcMainEvent): boolean {

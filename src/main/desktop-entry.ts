@@ -1,3 +1,5 @@
+import { STRINGS } from '../shared/strings'
+
 const RESERVED = /[\s"'\\><~|&;$*?#()`]/
 
 export function quoteExecArg(arg: string): string {
@@ -17,6 +19,20 @@ function escapeValue(value: string): string {
 }
 
 export type DesktopEntryFields = Record<string, string | boolean>
+
+export function desktopFileName(desktopId: string): string {
+  return `${desktopId}.desktop`
+}
+
+export function baseDesktopFields(iconName: string): DesktopEntryFields {
+  return {
+    Type: 'Application',
+    Name: STRINGS.appName,
+    GenericName: STRINGS.genericName,
+    Icon: iconName,
+    Terminal: false
+  }
+}
 
 export function buildDesktopEntry(fields: DesktopEntryFields): string {
   const lines = ['[Desktop Entry]']
